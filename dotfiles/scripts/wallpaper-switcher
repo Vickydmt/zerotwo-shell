@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+
+WALLPAPER_DIR="$HOME/Pictures/wallpapers"
+STATE_FILE="$HOME/.local/state/zerotwo/wallpaper/path.txt"
+[ ! -f "$STATE_FILE" ] && STATE_FILE="$HOME/.local/state/caelestia/wallpaper/path.txt"
+
+mkdir -p "$WALLPAPER_DIR"
+
+# Collect valid image files (sorted)
+mapfile -t WALLPAPERS < <(find "$WALLPAPER_DIR" -maxdepth 2 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" \) | sort)
+
+TOTAL=${#WALLPAPERS[@]}
+
+if [ "$TOTAL" -eq 0 ]; then
+    notify-send -a "ZeroTwo" -u normal "Wallpaper Switcher" "No wallpapers found in $WALLPAPER_DIR"
+    exit 0
+fi
+
+# Find current wallpaper
+CURRENT=""
+if [ -f "$STATE_FILE" ]; then
+    CURRENT=$(cat "$STATE_FILE" 2>/dev/null)
+fi
+
+CURRENT_IDX=-1
+for i in "${!WALLPAPERS[@]}"; do
+    if [ "${WALLPAPERS[$i]}" = "$CURRENT" ]; then
+        CURRENT_IDX=$i
+        break
+    fi
+done
+
+ACTION="${1:-next}"
+
+if [ "$CURRENT_IDX" -eq -1 ]; then
+    NEW_IDX=0
+else
+    if [ "$ACTION" = "prev" ] || [ "$ACTION" = "down" ]; then
+        NEW_IDX=$(( (CURRENT_IDX - 1 + TOTAL) % TOTAL ))
+    else
+        NEW_IDX=$(( (CURRENT_IDX + 1) % TOTAL ))
+    fi
+fi
+
+TARGET="${WALLPAPERS[$NEW_IDX]}"
+NAME=$(basename "$TARGET")
+
+# Apply wallpaper with caelestia (which also automatically adapts dynamic colorscheme)
+zerotwo wallpaper -f "$TARGET"
+
+# notify-send -a "ZeroTwo" -u low -i "$TARGET" "Wallpaper Changed" "$NAME ($((NEW_IDX + 1))/$TOTAL)"

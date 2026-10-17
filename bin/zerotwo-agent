@@ -1,0 +1,223 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# ZeroTwo OS - Universal AI Coding Agent Dispatcher (Omarchy Age of Agents)
+# ==============================================================================
+
+set -eo pipefail
+
+export PATH="$HOME/.local/bin:$HOME/.local/npm-global/bin:$PATH"
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/zerotwo"
+CONFIG_FILE="$CONFIG_DIR/agent"
+mkdir -p "$CONFIG_DIR"
+
+DEFAULT_AGENT="claude"
+
+get_current_agent() {
+    if [[ -f "$CONFIG_FILE" ]]; then
+        cat "$CONFIG_FILE" | tr -d '[:space:]'
+    else
+        echo "$DEFAULT_AGENT"
+    fi
+}
+
+set_agent() {
+    local target="$1"
+    echo "$target" > "$CONFIG_FILE"
+    echo -e "\e[32m✔ Default agent set to:\e[0m \e[1m$target\e[0m"
+}
+
+list_agents() {
+    local cur=$(get_current_agent)
+    echo -e "\e[1;36m=====================================================\e[0m"
+    echo -e "\e[1;35m  ZeroTwo OS  •  Universal Agent Launcher (Omarchy)  \e[0m"
+    echo -e "\e[1;36m=====================================================\e[0m"
+    echo -e "Default active agent: \e[1;32m$cur\e[0m\n"
+    echo "Supported AI Coding Agents:"
+
+    local agents=("claude" "opencode" "agy" "gemini" "codex" "copilot" "crush" "cursor-agent" "pi")
+    for a in "${agents[@]}"; do
+        local status="\e[31m[not installed]\e[0m"
+        if command -v "$a" &>/dev/null; then
+            status="\e[32m[installed: $(which $a)]\e[0m"
+        elif [[ "$a" =~ ^(claude|opencode|gemini|codex)$ ]]; then
+            status="\e[33m[available via npx]\e[0m"
+        fi
+
+        if [[ "$a" == "$cur" ]]; then
+            echo -e "  \e[1;32m★ $a (ACTIVE)\e[0m  $status"
+        else
+            echo -e "    $a          $status"
+        fi
+    done
+
+    echo -e "\n\e[90mUsage:\e[0m"
+    echo "  zerotwo agent set <agent>    Set default agent (e.g. claude, opencode, agy)"
+    echo "  zerotwo agent --pick         Open interactive GUI agent picker"
+    echo "  zerotwo agent --inline       Launch directly in current shell"
+    echo "  zerotwo agent prompt \"...\"   Send prompt to agent directly"
+}
+
+pick_agent() {
+    local agents=("claude" "opencode" "agy" "gemini" "codex" "copilot" "crush" "cursor-agent" "pi")
+    local selected=""
+
+    if command -v fuzzel &>/dev/null; then
+        selected=$(printf "%s\n" "${agents[@]}" | fuzzel --dmenu --prompt "Select AI Agent 󰚩 " --lines 9)
+    else
+        select opt in "${agents[@]}"; do
+            selected="$opt"
+            break
+        done
+    fi
+
+    if [[ -n "$selected" ]]; then
+        set_agent "$selected"
+    fi
+}
+
+# Parse subcommands
+case "${1:-}" in
+    set)
+        if [[ -z "${2:-}" ]]; then
+            echo "Error: Please specify agent name (e.g. zerotwo agent set claude)" >&2
+            exit 1
+        fi
+        set_agent "$2"
+        exit 0
+        ;;
+    list|--list|-l)
+        list_agents
+        exit 0
+        ;;
+    --pick|-p)
+        pick_agent
+        exit 0
+        ;;
+    prompt)
+        shift
+        PROMPT_TEXT="$*"
+        ;;
+esac
+
+inline=false
+prompt=""
+
+while (($#)); do
+    case "$1" in
+        --inline)
+            inline=true
+            shift
+            ;;
+        --pick)
+            pick_agent
+            shift
+            ;;
+        --prompt)
+            prompt="${2:?--prompt requires a text string}"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+if [[ -n "${PROMPT_TEXT:-}" ]]; then
+    prompt="$PROMPT_TEXT"
+fi
+
+# Prevent folder trust warnings: If started from raw $HOME, cd into Projects
+if [[ "$PWD" == "$HOME" ]]; then
+    mkdir -p "$HOME/Projects"
+    cd "$HOME/Projects"
+fi
+
+AGENT=$(get_current_agent)
+
+# Construct command based on agent specifications from Omarchy
+declare -a CMD
+
+case "$AGENT" in
+    claude)
+        if command -v claude &>/dev/null; then
+            CMD=(claude)
+        else
+            CMD=(npx -y @anthropic-ai/claude-code)
+        fi
+        [[ -n "$prompt" ]] && CMD+=(-- "$prompt")
+        ;;
+    opencode)
+        if command -v opencode &>/dev/null; then
+            CMD=(opencode --auto)
+        else
+            CMD=(npx -y opencode-ai --auto)
+        fi
+        [[ -n "$prompt" ]] && CMD+=(--prompt "$prompt")
+        ;;
+    agy)
+        if command -v agy &>/dev/null; then
+            CMD=(agy --dangerously-skip-permissions)
+        else
+            CMD=(agy)
+        fi
+        [[ -n "$prompt" ]] && CMD+=(--prompt-interactive "$prompt")
+        ;;
+    gemini)
+        if command -v gemini &>/dev/null; then
+            CMD=(gemini)
+        else
+            CMD=(npx -y @google/gemini-cli)
+        fi
+        [[ -n "$prompt" ]] && CMD+=("$prompt")
+        ;;
+    codex)
+        if command -v codex &>/dev/null; then
+            CMD=(codex --approve-for-me)
+        else
+            CMD=(npx -y @openai/codex --approve-for-me)
+        fi
+        [[ -n "$prompt" ]] && CMD+=(-- "$prompt")
+        ;;
+    copilot)
+        CMD=(copilot --allow-all)
+        [[ -n "$prompt" ]] && CMD+=(--interactive "$prompt")
+        ;;
+    crush)
+        CMD=(crush --yolo)
+        [[ -n "$prompt" ]] && CMD=(crush run "$prompt")
+        ;;
+    cursor-agent)
+        CMD=(cursor-agent --yolo --trust)
+        [[ -n "$prompt" ]] && CMD+=(agent -- "$prompt")
+        ;;
+    pi)
+        CMD=(pi)
+        [[ -n "$prompt" ]] && CMD+=("$prompt")
+        ;;
+    *)
+        echo "Unknown agent: $AGENT, falling back to claude" >&2
+        CMD=(claude)
+        ;;
+esac
+
+# Check execution context: inside terminal or GUI trigger
+if [[ "$inline" == "true" ]]; then
+    exec "${CMD[@]}"
+else
+    # Launch in Foot terminal with class zerotwo-agent for Hyprland window rules
+    # Wrap in bash session so if agent finishes or requires login, window stays open!
+    exec foot -a zerotwo-agent -T "ZeroTwo Agent • $AGENT" bash -c "
+        export PATH=\"\$HOME/.local/bin:\$HOME/.local/npm-global/bin:\$PATH\"
+        cd \"$PWD\"
+        echo -e '\e[1;35m╭────────────────────────────────────────────────────────╮\e[0m'
+        echo -e '\e[1;35m│\e[0m   \e[1;36mZeroTwo OS • AI Agent Scratchpad (SUPER+A to hide)\e[0m   \e[1;35m│\e[0m'
+        echo -e '\e[1;35m╰────────────────────────────────────────────────────────╯\e[0m'
+        echo ''
+        ${CMD[*]}
+        STATUS=\$?
+        echo ''
+        echo -e '\e[90mAgent finished (exit '\$STATUS'). Terminal shell is ready.\e[0m'
+        exec bash
+    "
+fi

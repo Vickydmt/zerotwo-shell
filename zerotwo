@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# ZeroTwo Desktop Environment CLI
+
+if [ "$1" = "--version" ] || [ "$1" = "-v" ]; then
+    echo "zerotwo-cli 2.5.0 (ZeroTwo OS)"
+    exit 0
+fi
+
+if [ "$1" = "agent" ]; then
+    shift
+    exec /home/zerotwo/.local/bin/zerotwo-agent "$@"
+fi
+
+if [ "$1" = "--help" ] || [ "$1" = "-h" ] || [ $# -eq 0 ]; then
+    /usr/bin/caelestia "$@" | sed 's/caelestia/zerotwo/g; s/Caelestia/ZeroTwo/g'
+    exit $?
+fi
+
+exec /usr/bin/caelestia "$@"
