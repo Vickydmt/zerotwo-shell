@@ -62,13 +62,12 @@ PageBase {
                 width: parent.width - Tokens.padding.largeIncreased * 2
                 spacing: Tokens.spacing.small
 
-                Image {
+                Logo {
                     Layout.alignment: Qt.AlignHCenter
-                    source: SysInfo.osLogo || "file:///home/zerotwo/.config/zerotwo/zerotwo.png"
+                    implicitWidth: 100
+                    implicitHeight: 100
                     width: 100
                     height: 100
-                    fillMode: Image.PreserveAspectFit
-                    asynchronous: true
                 }
 
                 StyledText {

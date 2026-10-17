@@ -8,8 +8,8 @@ import qs.utils
 Item {
     id: root
 
-    implicitWidth: Math.round(Tokens.font.body.large.pointSize * 1.2)
-    implicitHeight: Math.round(Tokens.font.body.large.pointSize * 1.2)
+    implicitWidth: Math.round(Tokens.font.body.large.pointSize * 1.6)
+    implicitHeight: Math.round(Tokens.font.body.large.pointSize * 1.6)
 
     MouseArea {
         anchors.fill: parent
@@ -30,8 +30,10 @@ Item {
         id: zerotwoLogo
 
         Logo {
-            implicitWidth: Math.round(Tokens.font.body.large.pointSize * 1.6)
-            implicitHeight: Math.round(Tokens.font.body.large.pointSize * 1.6)
+            implicitWidth: root.implicitWidth
+            implicitHeight: root.implicitHeight
+            width: root.implicitWidth
+            height: root.implicitHeight
         }
     }
 
