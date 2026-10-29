@@ -112,6 +112,8 @@ Singleton {
                     active.pause();
                 else
                     active.play();
+            } else {
+                Quickshell.execDetached(["playerctl", "play-pause"]);
             }
         }
     }
@@ -123,8 +125,14 @@ Singleton {
         description: "Previous track"
         onPressed: {
             const active = root.active;
-            if (active && (active.canGoPrevious || active.canControl))
-                active.previous();
+            if (active) {
+                const id = (active.identity || "").toLowerCase();
+                if (id.includes("mpv")) {
+                    Quickshell.execDetached(["playerctl", "-p", "mpv", "position", "10-"]);
+                } else if (active.canGoPrevious || active.canControl) {
+                    active.previous();
+                }
+            }
         }
     }
 
@@ -135,8 +143,14 @@ Singleton {
         description: "Next track"
         onPressed: {
             const active = root.active;
-            if (active && (active.canGoNext || active.canControl))
-                active.next();
+            if (active) {
+                const id = (active.identity || "").toLowerCase();
+                if (id.includes("mpv")) {
+                    Quickshell.execDetached(["playerctl", "-p", "mpv", "position", "10+"]);
+                } else if (active.canGoNext || active.canControl) {
+                    active.next();
+                }
+            }
         }
     }
 
