@@ -139,6 +139,7 @@ return {
     kbMediaPrev                = "CTRL + SUPER + Minus",
     kbMediaStop                = "CTRL + SUPER + Backspace",
     kbVolumeMute               = "SUPER + SHIFT + M",
+    kbVisualiser               = { "SUPER + B", "CTRL + SUPER + B" },
 
     -- Misc
     kbLauncher                 = "SUPER + D",

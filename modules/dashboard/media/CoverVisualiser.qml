@@ -27,6 +27,7 @@ Item {
         asynchronous: true
         preferredRendererType: Shape.CurveRenderer
         data: bars.instances
+        visible: Config.background.visualiser.enabled
     }
 
     Variants {

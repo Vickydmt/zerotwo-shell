@@ -2,6 +2,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Caelestia
+import Caelestia.Config
+import Caelestia.I18n
 import qs.components.misc
 import qs.services
 import qs.modules.nexus
@@ -106,6 +108,28 @@ Scope {
             const screenState = ShellState.forActive();
             screenState.utilities = !screenState.utilities;
         }
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "visualiser"
+        description: "Toggle audio visualiser and beat detector"
+        onPressed: {
+            GlobalConfig.background.visualiser.enabled = !GlobalConfig.background.visualiser.enabled;
+            const state = GlobalConfig.background.visualiser.enabled ? Tr.tr("Enabled") : Tr.tr("Disabled");
+            Toaster.toast(Tr.tr("Visualiser"), `${Tr.tr("Beat detector")} ${state}`, "audio-volume-high", Toast.Info);
+        }
+    }
+
+    IpcHandler {
+        function toggle(): void {
+            GlobalConfig.background.visualiser.enabled = !GlobalConfig.background.visualiser.enabled;
+            const state = GlobalConfig.background.visualiser.enabled ? Tr.tr("Enabled") : Tr.tr("Disabled");
+            Toaster.toast(Tr.tr("Visualiser"), `${Tr.tr("Beat detector")} ${state}`, "audio-volume-high", Toast.Info);
+        }
+
+        target: "visualiser"
     }
 
     IpcHandler {

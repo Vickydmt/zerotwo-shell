@@ -196,6 +196,7 @@ create_bind({ vars.kbMediaToggle, "XF86AudioPlay", "XF86AudioPause" }, hl.dsp.gl
 create_bind({ vars.kbMediaNext, "XF86AudioNext" }, hl.dsp.global("zerotwo:mediaNext"), locked)
 create_bind({ vars.kbMediaPrev, "XF86AudioPrev" }, hl.dsp.global("zerotwo:mediaPrev"), locked)
 create_bind({ vars.kbMediaStop, "XF86AudioStop" }, hl.dsp.global("zerotwo:mediaStop"), locked)
+create_bind(vars.kbVisualiser, hl.dsp.global("zerotwo:visualiser"), locked)
 
 -- Volume
 create_bind({ vars.kbVolumeMute, "XF86AudioMute" }, hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"), locked)
