@@ -118,7 +118,7 @@ Scope {
         onPressed: {
             GlobalConfig.background.visualiser.enabled = !GlobalConfig.background.visualiser.enabled;
             const state = GlobalConfig.background.visualiser.enabled ? Tr.tr("Enabled") : Tr.tr("Disabled");
-            Toaster.toast(Tr.tr("Visualiser"), `${Tr.tr("Beat detector")} ${state}`, "audio-volume-high", Toast.Info);
+            Toaster.toast(Tr.tr("Visualiser"), `${Tr.tr("Beat detector")} ${state}`, "graphic_eq", Toast.Info);
         }
     }
 
@@ -126,7 +126,7 @@ Scope {
         function toggle(): void {
             GlobalConfig.background.visualiser.enabled = !GlobalConfig.background.visualiser.enabled;
             const state = GlobalConfig.background.visualiser.enabled ? Tr.tr("Enabled") : Tr.tr("Disabled");
-            Toaster.toast(Tr.tr("Visualiser"), `${Tr.tr("Beat detector")} ${state}`, "audio-volume-high", Toast.Info);
+            Toaster.toast(Tr.tr("Visualiser"), `${Tr.tr("Beat detector")} ${state}`, "graphic_eq", Toast.Info);
         }
 
         target: "visualiser"

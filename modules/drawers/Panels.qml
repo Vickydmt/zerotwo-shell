@@ -137,8 +137,8 @@ Item {
     Toasts.Toasts {
         id: toasts
 
-        anchors.bottom: sidebar.visible ? parent.bottom : utilities.top
-        anchors.right: sidebar.left
+        anchors.top: notifications.visible && notifications.height > 0 ? notifications.bottom : parent.top
+        anchors.right: sidebar.visible ? sidebar.left : parent.right
         anchors.margins: Tokens.padding.medium
     }
 

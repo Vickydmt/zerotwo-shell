@@ -81,7 +81,7 @@ Item {
         opacity: modelData.closed || previewHidden ? 0 : 1
         scale: modelData.closed || previewHidden ? 0.7 : 1
 
-        anchors.bottomMargin: {
+        anchors.topMargin: {
             root.flag; // Force update
             let y = 0;
             for (let i = 0; i < index; i++) {
@@ -94,7 +94,7 @@ Item {
 
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.top: parent.top
         implicitHeight: toastInner.implicitHeight
 
         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
@@ -115,7 +115,7 @@ Item {
 
         ParallelAnimation {
             running: toast.modelData.closed
-            onStarted: toast.anchors.bottomMargin = toast.anchors.bottomMargin
+            onStarted: toast.anchors.topMargin = toast.anchors.topMargin
             onFinished: toast.modelData.unlock(toast)
 
             Anim {
@@ -147,7 +147,7 @@ Item {
             Anim {}
         }
 
-        Behavior on anchors.bottomMargin {
+        Behavior on anchors.topMargin {
             Anim {}
         }
     }
