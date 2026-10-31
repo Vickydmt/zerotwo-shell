@@ -1,0 +1,323 @@
+#!/usr/bin/env python3
+"""
+ZeroTwo USB Tool Backend Engine
+Safe USB Flasher (ISO -> USB) and Formatter (FAT32/exFAT/NTFS/ext4)
+Compatible with all Linux distributions.
+"""
+
+import sys
+import os
+import json
+import subprocess
+import time
+import argparse
+import shutil
+from typing import List, Dict, Any, Optional
+
+def run_cmd(cmd: List[str], check: bool = True, capture: bool = True) -> subprocess.CompletedProcess:
+    """Run command with subprocess."""
+    return subprocess.run(cmd, check=check, text=True, capture_output=capture)
+
+def is_root() -> bool:
+    return os.geteuid() == 0
+
+def get_devices() -> List[Dict[str, Any]]:
+    """Scan and return removable/USB storage devices, strictly excluding system disks."""
+    try:
+        proc = run_cmd([
+            "lsblk", "-J", "-b", "-o",
+            "NAME,PATH,MODEL,VENDOR,SIZE,ROTA,RM,HOTPLUG,TRAN,TYPE,FSTYPE,LABEL,MOUNTPOINTS,PKNAME"
+        ])
+        data = json.loads(proc.stdout)
+    except Exception as e:
+        sys.stderr.write(f"Error querying lsblk: {e}\n")
+        return []
+
+    devices = []
+
+    def check_has_system_mount(dev: Dict[str, Any]) -> bool:
+        mounts = dev.get("mountpoints", []) or []
+        for m in mounts:
+            if m in ("/", "/boot", "/boot/efi", "/home", "/var"):
+                return True
+        for child in dev.get("children", []) or []:
+            if check_has_system_mount(child):
+                return True
+        return False
+
+    for dev in data.get("blockdevices", []):
+        dev_type = dev.get("type", "")
+        if dev_type != "disk":
+            continue
+        name = dev.get("name", "")
+        if name.startswith("loop") or name.startswith("zram") or name.startswith("ram"):
+            continue
+
+        # Strict safety check: Never touch system disks
+        if check_has_system_mount(dev):
+            continue
+
+        tran = (dev.get("tran") or "").lower()
+        rm = bool(dev.get("rm"))
+        hotplug = bool(dev.get("hotplug"))
+
+        # Must be USB or removable
+        if tran != "usb" and not rm and not hotplug:
+            continue
+
+        raw_size = int(dev.get("size", 0) or 0)
+        if raw_size == 0:
+            continue
+
+        # Human readable size
+        if raw_size >= 1024**4:
+            human_size = f"{raw_size / (1024**4):.1f} TB"
+        elif raw_size >= 1024**3:
+            human_size = f"{raw_size / (1024**3):.1f} GB"
+        elif raw_size >= 1024**2:
+            human_size = f"{raw_size / (1024**2):.1f} MB"
+        else:
+            human_size = f"{raw_size} B"
+
+        model = (dev.get("model") or dev.get("vendor") or "Generic USB Drive").strip()
+        path = dev.get("path") or f"/dev/{name}"
+
+        # Collect child partitions
+        partitions = []
+        for child in dev.get("children", []) or []:
+            partitions.append({
+                "name": child.get("name"),
+                "path": child.get("path"),
+                "size": child.get("size"),
+                "fstype": child.get("fstype") or "unknown",
+                "label": child.get("label") or "",
+                "mountpoints": child.get("mountpoints") or []
+            })
+
+        devices.append({
+            "name": name,
+            "path": path,
+            "model": model,
+            "size": raw_size,
+            "human_size": human_size,
+            "partitions": partitions
+        })
+
+    return devices
+
+def unmount_device(dev_path: str):
+    """Unmount all partitions of the given device."""
+    run_cmd(["umount", dev_path], check=False)
+    # Check partitions from lsblk
+    try:
+        proc = run_cmd(["lsblk", "-n", "-o", "PATH", dev_path], check=False)
+        for line in proc.stdout.strip().splitlines():
+            part = line.strip()
+            if part:
+                run_cmd(["umount", part], check=False)
+    except Exception:
+        pass
+
+def format_drive(dev_path: str, fstype: str = "fat32", label: str = "MOVIES", progress_callback=None) -> bool:
+    """Format USB drive as normal storage."""
+    if not is_root():
+        sys.stderr.write("Formatting requires root privileges. Please run with sudo or pkexec.\n")
+        return False
+
+    devices = {d["path"]: d for d in get_devices()}
+    if dev_path not in devices:
+        # Also check if user passed /dev/sda1 instead of /dev/sda
+        matched = None
+        for d in devices.values():
+            for p in d["partitions"]:
+                if p["path"] == dev_path:
+                    matched = d["path"]
+                    break
+        if matched:
+            dev_path = matched
+        else:
+            sys.stderr.write(f"Refusing to format '{dev_path}': device not found or is a protected system drive.\n")
+            return False
+
+    fstype = fstype.lower().strip()
+    if fstype not in ("fat32", "exfat", "ntfs", "ext4"):
+        sys.stderr.write(f"Unsupported filesystem: '{fstype}'. Supported: fat32, exfat, ntfs, ext4.\n")
+        return False
+
+    if progress_callback:
+        progress_callback(10, f"Unmounting {dev_path}...")
+    unmount_device(dev_path)
+
+    if progress_callback:
+        progress_callback(25, f"Wiping partition signatures...")
+    run_cmd(["wipefs", "-af", dev_path], check=False)
+
+    if progress_callback:
+        progress_callback(40, f"Creating new MBR partition table...")
+    run_cmd(["parted", "-s", dev_path, "mklabel", "msdos", "mkpart", "primary", "1MiB", "100%"])
+    run_cmd(["partprobe", dev_path], check=False)
+    time.sleep(1)
+
+    # Determine partition 1 path
+    part1 = f"{dev_path}1"
+    if not os.path.exists(part1):
+        # Handle nvme or mmc style
+        if os.path.exists(f"{dev_path}p1"):
+            part1 = f"{dev_path}p1"
+        else:
+            time.sleep(1)
+
+    if progress_callback:
+        progress_callback(60, f"Formatting {part1} as {fstype.upper()} with label '{label}'...")
+
+    if fstype == "fat32":
+        # 32k clusters, 0xf8 media byte for maximum Android/TV compatibility
+        run_cmd(["mkfs.vfat", "-F", "32", "-s", "64", "-n", label[:11], part1])
+        # Auto-sync backup boot sector
+        p = subprocess.Popen(["fsck.vfat", "-r", part1], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        p.communicate(input="1\n")
+    elif fstype == "exfat":
+        run_cmd(["mkfs.exfat", "-n", label[:15], part1])
+    elif fstype == "ntfs":
+        run_cmd(["mkfs.ntfs", "-f", "-L", label[:32], part1])
+    elif fstype == "ext4":
+        run_cmd(["mkfs.ext4", "-F", "-L", label[:16], part1])
+
+    if progress_callback:
+        progress_callback(90, "Flushing filesystem buffers to disk...")
+    run_cmd(["sync"])
+    run_cmd(["partprobe", dev_path], check=False)
+
+    if progress_callback:
+        progress_callback(100, f"Drive {dev_path} successfully formatted as {fstype.upper()} ({label})!")
+
+    return True
+
+def flash_iso(iso_path: str, dev_path: str, progress_callback=None) -> bool:
+    """Flash an ISO image to a USB drive."""
+    if not is_root():
+        sys.stderr.write("Flashing requires root privileges. Please run with sudo or pkexec.\n")
+        return False
+
+    if not os.path.isfile(iso_path):
+        sys.stderr.write(f"ISO file not found: '{iso_path}'\n")
+        return False
+
+    devices = {d["path"]: d for d in get_devices()}
+    if dev_path not in devices:
+        sys.stderr.write(f"Refusing to flash to '{dev_path}': device not found or is a protected system drive.\n")
+        return False
+
+    total_bytes = os.path.getsize(iso_path)
+    if total_bytes == 0:
+        sys.stderr.write("ISO file is empty!\n")
+        return False
+
+    if progress_callback:
+        progress_callback(0, f"Unmounting {dev_path}...")
+    unmount_device(dev_path)
+
+    if progress_callback:
+        progress_callback(2, f"Wiping old partition signatures...")
+    run_cmd(["wipefs", "-af", dev_path], check=False)
+
+    chunk_size = 4 * 1024 * 1024  # 4 MB
+    written = 0
+
+    if progress_callback:
+        progress_callback(5, f"Writing ISO to {dev_path}...")
+
+    with open(iso_path, "rb") as f_in, open(dev_path, "wb") as f_out:
+        start_time = time.time()
+        last_update = start_time
+
+        while True:
+            chunk = f_in.read(chunk_size)
+            if not chunk:
+                break
+            f_out.write(chunk)
+            written += len(chunk)
+
+            now = time.time()
+            if now - last_update >= 0.2:
+                last_update = now
+                pct = int((written / total_bytes) * 90) + 5
+                speed = (written / (now - start_time)) / (1024 * 1024)
+                if progress_callback:
+                    progress_callback(pct, f"Flashing: {pct}% ({written // (1024*1024)}MB / {total_bytes // (1024*1024)}MB @ {speed:.1f} MB/s)")
+
+    if progress_callback:
+        progress_callback(95, "Syncing data to USB storage (please wait)...")
+    run_cmd(["sync"])
+    run_cmd(["partprobe", dev_path], check=False)
+
+    if progress_callback:
+        progress_callback(100, f"Bootable USB successfully created on {dev_path}!")
+
+    return True
+
+def main():
+    parser = argparse.ArgumentParser(description="ZeroTwo USB Tool - Flash Bootable USB & Restore Normal Pendrive")
+    subparsers = parser.add_subparsers(dest="command")
+
+    # list
+    list_p = subparsers.add_parser("list", help="List available safe USB drives")
+    list_p.add_argument("--json", action="store_true", help="Output JSON results")
+
+    # format
+    fmt_p = subparsers.add_parser("format", help="Restore pendrive to normal storage")
+    fmt_p.add_argument("device", help="USB block device path (e.g. /dev/sda)")
+    fmt_p.add_argument("--fs", default="fat32", choices=["fat32", "exfat", "ntfs", "ext4"], help="Filesystem type")
+    fmt_p.add_argument("--label", default="MOVIES", help="Partition label")
+    fmt_p.add_argument("--json", action="store_true", help="Output JSON results")
+
+    # flash
+    fl_p = subparsers.add_parser("flash", help="Flash ISO file to USB drive")
+    fl_p.add_argument("iso", help="Path to ISO file")
+    fl_p.add_argument("device", help="Target USB block device (e.g. /dev/sda)")
+    fl_p.add_argument("--json", action="store_true", help="Output JSON results")
+
+    parser.add_argument("--json", action="store_true", help="Output JSON results")
+    args = parser.parse_args()
+
+    if args.command == "list":
+        devs = get_devices()
+        if args.json:
+            print(json.dumps(devs, indent=2))
+        else:
+            if not devs:
+                print("No removable USB drives found.")
+            else:
+                print(f"{'DEVICE':<12} {'SIZE':<10} {'MODEL':<24} {'PARTITIONS'}")
+                print("-" * 65)
+                for d in devs:
+                    parts = ", ".join([f"{p['name']} ({p['fstype']})" for p in d['partitions']]) or "none"
+                    print(f"{d['path']:<12} {d['human_size']:<10} {d['model']:<24} {parts}")
+
+    elif args.command == "format":
+        def progress(pct, msg):
+            if args.json:
+                print(json.dumps({"progress": pct, "message": msg}), flush=True)
+            else:
+                print(f"[{pct}%] {msg}")
+
+        ok = format_drive(args.device, fstype=args.fs, label=args.label, progress_callback=progress)
+        sys.exit(0 if ok else 1)
+
+    elif args.command == "flash":
+        def progress(pct, msg):
+            if args.json:
+                print(json.dumps({"progress": pct, "message": msg}), flush=True)
+            else:
+                print(f"[{pct}%] {msg}")
+
+        ok = flash_iso(args.iso, args.device, progress_callback=progress)
+        sys.exit(0 if ok else 1)
+
+    else:
+        # Default: if no command, list devices
+        devs = get_devices()
+        print(json.dumps(devs, indent=2) if args.json else f"ZeroTwo USB Engine ready. Found {len(devs)} USB device(s). Use --help for usage.")
+
+if __name__ == "__main__":
+    main()

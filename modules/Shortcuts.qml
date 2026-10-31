@@ -132,6 +132,24 @@ Scope {
         target: "visualiser"
     }
 
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
+        name: "usb"
+        description: "Open ZeroTwo USB Flasher and Formatter"
+        onPressed: {
+            Quickshell.process(["/usr/local/bin/zerotwo-usb-gui"]).running = true;
+        }
+    }
+
+    IpcHandler {
+        function open(): void {
+            Quickshell.process(["/usr/local/bin/zerotwo-usb-gui"]).running = true;
+        }
+
+        target: "usb"
+    }
+
     IpcHandler {
         function toggle(drawer: string): void {
             if (list().split("\n").includes(drawer)) {
