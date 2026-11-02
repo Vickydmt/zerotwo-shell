@@ -144,6 +144,7 @@ create_bind(vars.kbWindowPip, function()
     end
 end)
 create_bind(vars.kbPinWindow, hl.dsp.window.pin())
+create_bind(vars.kbMonitorMode, hl.dsp.exec_cmd("zerotwo monitor cycle"))
 create_bind(vars.kbWindowFullscreen, hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 create_bind(vars.kbWindowBorderedFullscreen, hl.dsp.window.fullscreen({ mode = "maximized" }))
 create_bind(vars.kbToggleWindowFloating, hl.dsp.window.float())

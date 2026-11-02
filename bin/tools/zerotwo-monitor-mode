@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""
+ZeroTwo Monitor Mode Switcher (Super+P)
+Cycles between 3 modes:
+  1. Extend Mode: Both internal laptop screen and external monitor active.
+  2. Secondary Only Mode: External monitor is active, laptop screen is turned OFF.
+  3. Main Only Mode: Built-in laptop screen is active, external monitor is turned OFF.
+"""
+
+import sys
+import os
+import json
+import subprocess
+from pathlib import Path
+
+STATE_FILE = Path(os.path.expanduser("~/.local/state/zerotwo/monitor_mode"))
+
+def run_cmd(cmd):
+    try:
+        return subprocess.check_output(cmd, text=True).strip()
+    except Exception:
+        return ""
+
+def notify(title, message, icon="desktop_windows"):
+    # 1. Shell OSD toast (top-right Material toast)
+    try:
+        subprocess.run(["qs", "-c", "caelestia", "ipc", "call", "toaster", "info", title, message, icon],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+    # 2. Desktop notification drawer
+    try:
+        subprocess.run(["notify-send", "-a", "zerotwo", "-i", "video-display", title, message],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+def get_monitors():
+    out = run_cmd(["hyprctl", "monitors", "all", "-j"])
+    if not out:
+        return [], []
+    try:
+        data = json.loads(out)
+    except Exception:
+        return [], []
+
+    internal = []
+    external = []
+    for m in data:
+        name = m.get("name", "")
+        if name.startswith("eDP") or name.startswith("LVDS"):
+            internal.append(m)
+        else:
+            external.append(m)
+    return internal, external
+
+def set_mode(mode):
+    internal_list, external_list = get_monitors()
+
+    if not internal_list:
+        notify("Monitor Error", "No internal display found.", "error")
+        return
+
+    internal = internal_list[0]
+    int_name = internal["name"]
+    int_mode = f"{internal.get('width', 1920)}x{internal.get('height', 1200)}@{round(internal.get('refreshRate', 144))}"
+    int_scale = internal.get("scale", 1)
+
+    if not external_list:
+        lua = f'hl.monitor({{ output = "{int_name}", mode = "{int_mode}", position = "0x0", scale = {int_scale}, disabled = false }})'
+        subprocess.run(["hyprctl", "repl", lua], check=False)
+        notify("Display Mode", "No external monitor detected (Laptop Screen Active)", "laptop")
+        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        STATE_FILE.write_text("main")
+        return
+
+    external = external_list[0]
+    ext_name = external["name"]
+    ext_scale = external.get("scale", 1)
+
+    if mode == "extend":
+        # 1. Extend mode: both active
+        lua = (
+            f'hl.monitor({{ output = "{int_name}", mode = "{int_mode}", position = "0x0", scale = {int_scale}, disabled = false }}); '
+            f'hl.monitor({{ output = "{ext_name}", mode = "preferred", position = "auto-right", scale = {ext_scale}, disabled = false }})'
+        )
+        subprocess.run(["hyprctl", "repl", lua], check=False)
+        notify("Display Mode", "Extend Mode (Both Displays Active)", "desktop_windows")
+
+    elif mode == "secondary":
+        # 2. Secondary display only (laptop screen off)
+        # Enable external first, then disable internal
+        lua = (
+            f'hl.monitor({{ output = "{ext_name}", mode = "preferred", position = "0x0", scale = {ext_scale}, disabled = false }}); '
+            f'hl.monitor({{ output = "{int_name}", disabled = true }})'
+        )
+        subprocess.run(["hyprctl", "repl", lua], check=False)
+        notify("Display Mode", "Secondary Only (Laptop Screen Off)", "tv")
+
+    elif mode == "main":
+        # 3. Laptop display only (secondary monitor off)
+        # Enable internal first, then disable external
+        lua = (
+            f'hl.monitor({{ output = "{int_name}", mode = "{int_mode}", position = "0x0", scale = {int_scale}, disabled = false }}); '
+            f'hl.monitor({{ output = "{ext_name}", disabled = true }})'
+        )
+        subprocess.run(["hyprctl", "repl", lua], check=False)
+        notify("Display Mode", "Main Display Only (Secondary Screen Off)", "laptop")
+
+    else:
+        sys.stderr.write(f"Unknown mode: {mode}\n")
+        return
+
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(mode)
+
+def cycle_mode():
+    current = "extend"
+    if STATE_FILE.exists():
+        try:
+            current = STATE_FILE.read_text().strip()
+        except Exception:
+            current = "extend"
+    else:
+        # Detect from monitors
+        internal_list, external_list = get_monitors()
+        if internal_list and external_list:
+            int_disabled = internal_list[0].get("disabled", False)
+            ext_disabled = external_list[0].get("disabled", False)
+            if not int_disabled and not ext_disabled:
+                current = "extend"
+            elif int_disabled and not ext_disabled:
+                current = "secondary"
+            else:
+                current = "main"
+
+    cycle = {
+        "extend": "secondary",
+        "secondary": "main",
+        "main": "extend"
+    }
+    next_mode = cycle.get(current, "extend")
+    set_mode(next_mode)
+
+def main():
+    if len(sys.argv) > 1:
+        arg = sys.argv[1].lower().strip()
+        if arg in ("extend", "secondary", "main"):
+            set_mode(arg)
+        elif arg in ("cycle", "next"):
+            cycle_mode()
+        elif arg == "status":
+            current = STATE_FILE.read_text().strip() if STATE_FILE.exists() else "extend"
+            print(current)
+        else:
+            print("Usage: zerotwo-monitor-mode [cycle|extend|secondary|main|status]")
+    else:
+        cycle_mode()
+
+if __name__ == "__main__":
+    main()
