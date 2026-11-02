@@ -60,7 +60,7 @@ create_bind(
 )
 
 -- Misc
-create_bind(vars.kbSession, hl.dsp.global("zerotwo:session"))
+create_bind(vars.kbSession, hl.dsp.global("zerotwo:session"), locked)
 create_bind(vars.kbShowSidebar, hl.dsp.global("zerotwo:sidebar"))
 create_bind(vars.kbClearNotifs, hl.dsp.global("zerotwo:clearNotifs"), locked)
 create_bind(vars.kbShowPanels, hl.dsp.global("zerotwo:showall"))

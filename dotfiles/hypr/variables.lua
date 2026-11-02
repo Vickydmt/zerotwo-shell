@@ -144,7 +144,7 @@ return {
 
     -- Misc
     kbLauncher                 = "SUPER + D",
-    kbSession                  = "CTRL + ALT + Delete",
+    kbSession                  = { "CTRL + ALT + Delete", "XF86PowerOff" },
     kbShowSidebar              = "SUPER + N",
     kbClearNotifs              = "CTRL + ALT + C",
     kbShowPanels               = "SUPER + K",
