@@ -27,9 +27,11 @@ Scope {
         if (!action)
             return;
 
-        if (action === "lock")
+        if (action === "lock") {
+            if (isCharging)
+                return;
             lock.lock.locked = true;
-        else if (action === "unlock")
+        } else if (action === "unlock")
             lock.lock.locked = false;
         else if (typeof action === "string")
             Hypr.dispatch(Hypr.usingLua && ["dpms off", "dpms on"].includes(action) ? `hl.dsp.dpms({ action = "${action === "dpms off" ? "disable" : "enable"}" })` : action);
@@ -66,6 +68,9 @@ Scope {
                 if (modelData.inhibitWhenAudio && root.hasPlayer)
                     return false;
                 if (modelData.inhibitWhenCharging && root.isCharging)
+                    return false;
+                const isLockAction = modelData.idleAction === "lock" || (Array.isArray(modelData.idleAction) && modelData.idleAction.includes("lock"));
+                if (isLockAction && root.isCharging)
                     return false;
                 return true;
             }
