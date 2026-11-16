@@ -17,7 +17,9 @@ Item {
         anchors.centerIn: parent
         width: root.width > 0 ? root.width : root.implicitWidth
         height: root.height > 0 ? root.height : root.implicitHeight
-        source: Qt.resolvedUrl(`${Quickshell.shellDir}/assets/zerotwo.png`)
+        source: Qt.resolvedUrl(`${Quickshell.shellDir}/assets/zerotwo.svg`)
+        sourceSize.width: Math.round(width * 2)
+        sourceSize.height: Math.round(height * 2)
         fillMode: Image.PreserveAspectFit
         asynchronous: true
         smooth: true

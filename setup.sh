@@ -26,6 +26,7 @@ chmod +x "$HOME/.local/bin/wallpaper-switcher"
 # 5. Shell configuration & Zero Two logo
 mkdir -p "$HOME/.config/zerotwo"
 cp "$SCRIPT_DIR/assets/zerotwo.png" "$HOME/.config/zerotwo/"
+cp "$SCRIPT_DIR/assets/zerotwo.svg" "$HOME/.config/zerotwo/"
 cat << 'SHELL_EOF' > "$HOME/.config/zerotwo/shell.json"
 {
     "appearance": {
@@ -34,7 +35,7 @@ cat << 'SHELL_EOF' > "$HOME/.config/zerotwo/shell.json"
         }
     },
     "general": {
-        "logo": "$HOME/.config/zerotwo/zerotwo.png"
+        "logo": "$HOME/.config/zerotwo/zerotwo.svg"
     }
 }
 SHELL_EOF
