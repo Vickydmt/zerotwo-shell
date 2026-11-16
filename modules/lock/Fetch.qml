@@ -77,6 +77,7 @@ StyledRect {
                 id: iconLoader
 
                 Layout.fillHeight: true
+                Layout.preferredWidth: height
                 active: root.width > Tokens.sizes.lock.largeLogoWidth
 
                 sourceComponent: SysInfo.isDefaultLogo ? zerotwoLogo : distroIcon
@@ -162,7 +163,7 @@ StyledRect {
         id: zerotwoLogo
 
         Logo {
-            width: height
+            anchors.fill: parent
         }
     }
 
